@@ -15,10 +15,14 @@ fn main() {
     let mut clusterer = Clusterer::new().with_max_dist(0.6).with_min_members(2);
 
     let stdin = std::io::stdin();
-    let lock = stdin.lock();
+    let mut line = String::new();
 
-    for line in lock.lines() {
-        let line = line.unwrap();
+    loop {
+        line.clear();
+        let read = stdin.read_line(&mut line).unwrap();
+        if read == 0 {
+            break;
+        }
 
         clusterer.process_line(&line);
     }
