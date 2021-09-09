@@ -1,7 +1,7 @@
 use std::{borrow::Cow, fmt};
 
 use crate::{
-    patterns::{self, PatternElement},
+    patterns::{self, Pattern, PatternElement},
     scoring,
 };
 
@@ -14,16 +14,16 @@ pub struct Clusterer {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Cluster<'a> {
-    pub representative: Vec<PatternElement<'a>>,
+    pub representative: Pattern<'a>,
     pub count: u32,
-    pub pattern: Vec<PatternElement<'a>>,
+    pub pattern: Pattern<'a>,
 }
 
 impl<'a> fmt::Display for Cluster<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} ", self.count)?;
 
-        for element in &self.pattern {
+        for element in self.pattern.iter() {
             match element {
                 PatternElement::Text(t) => write!(f, "{} ", t)?,
                 PatternElement::Placeholder => write!(f, "--- ")?,
@@ -54,10 +54,11 @@ impl Clusterer {
     }
 
     pub fn process_line(&mut self, line: &str) {
-        let pattern: Vec<PatternElement> = line
-            .split(" ")
-            .map(|t| PatternElement::Text(Cow::Borrowed(t)))
-            .collect();
+        let pattern = Pattern::new(
+            line.split(" ")
+                .map(|t| PatternElement::Text(Cow::Borrowed(t)))
+                .collect(),
+        );
 
         for cluster in &mut self.clusters {
             let score = scoring::distance(&cluster.representative, &pattern, self.max_dist);
@@ -72,13 +73,15 @@ impl Clusterer {
             }
         }
 
-        let pattern: Vec<PatternElement<'static>> = pattern
-            .into_iter()
-            .map(|element| match element {
-                PatternElement::Placeholder => PatternElement::Placeholder,
-                PatternElement::Text(t) => PatternElement::Text(Cow::Owned(t.into_owned())),
-            })
-            .collect();
+        let pattern = Pattern::new(
+            pattern
+                .into_iter()
+                .map(|element| match element {
+                    PatternElement::Placeholder => PatternElement::Placeholder,
+                    PatternElement::Text(t) => PatternElement::Text(Cow::Owned(t.into_owned())),
+                })
+                .collect(),
+        );
 
         self.clusters.push(Cluster {
             representative: pattern.clone(),
@@ -103,7 +106,7 @@ impl Clusterer {
 
 #[cfg(test)]
 mod test {
-    use crate::patterns::PatternElement;
+    use crate::patterns::{Pattern, PatternElement};
 
     use super::{Cluster, Clusterer};
 
@@ -127,14 +130,19 @@ mod test {
             clusters,
             vec![
                 Cluster {
-                    representative: vec_into!["hello", "1", "y", "3"],
+                    representative: Pattern::new(vec_into!["hello", "1", "y", "3"]),
                     count: 2,
-                    pattern: vec_into!["hello", "1", PatternElement::Placeholder, "3"]
+                    pattern: Pattern::new(vec_into![
+                        "hello",
+                        "1",
+                        PatternElement::Placeholder,
+                        "3"
+                    ])
                 },
                 Cluster {
-                    representative: vec_into!["abc", "m", "n", "q"],
+                    representative: Pattern::new(vec_into!["abc", "m", "n", "q"]),
                     count: 1,
-                    pattern: vec_into!["abc", "m", "n", "q"]
+                    pattern: Pattern::new(vec_into!["abc", "m", "n", "q"])
                 },
             ]
         );
@@ -150,9 +158,9 @@ mod test {
         assert_eq!(
             clusters,
             vec![Cluster {
-                representative: vec_into!["hello", "1", "y", "3"],
+                representative: Pattern::new(vec_into!["hello", "1", "y", "3"]),
                 count: 2,
-                pattern: vec_into!["hello", "1", PatternElement::Placeholder, "3"]
+                pattern: Pattern::new(vec_into!["hello", "1", PatternElement::Placeholder, "3"])
             }]
         );
     }
@@ -168,19 +176,19 @@ mod test {
             clusters,
             vec![
                 Cluster {
-                    representative: vec_into!["hello", "1", "y", "3"],
+                    representative: Pattern::new(vec_into!["hello", "1", "y", "3"]),
                     count: 1,
-                    pattern: vec_into!["hello", "1", "y", "3"]
+                    pattern: Pattern::new(vec_into!["hello", "1", "y", "3"])
                 },
                 Cluster {
-                    representative: vec_into!["hello", "1", "x", "3"],
+                    representative: Pattern::new(vec_into!["hello", "1", "x", "3"]),
                     count: 1,
-                    pattern: vec_into!["hello", "1", "x", "3"]
+                    pattern: Pattern::new(vec_into!["hello", "1", "x", "3"])
                 },
                 Cluster {
-                    representative: vec_into!["abc", "m", "n", "q"],
+                    representative: Pattern::new(vec_into!["abc", "m", "n", "q"]),
                     count: 1,
-                    pattern: vec_into!["abc", "m", "n", "q"]
+                    pattern: Pattern::new(vec_into!["abc", "m", "n", "q"])
                 },
             ]
         );
