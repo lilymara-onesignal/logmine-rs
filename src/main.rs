@@ -5,7 +5,6 @@ mod macros;
 mod clusterer;
 mod parallel_clusterer;
 mod pattern;
-mod processor;
 mod scoring;
 
 use std::io::BufRead;
