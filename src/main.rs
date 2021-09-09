@@ -1,15 +1,6 @@
-#[macro_use]
-#[cfg(test)]
-mod macros;
-
-mod clusterer;
-mod parallel_clusterer;
-mod pattern;
-mod scoring;
-
 use std::io::BufRead;
 
-use clusterer::{Cluster, Clusterer};
+use logmine_rs::clusterer::{Cluster, Clusterer};
 use structopt::StructOpt;
 
 #[derive(structopt::StructOpt)]
@@ -78,5 +69,5 @@ fn main_parallel(clusterer: Clusterer) -> Vec<Cluster<'static>> {
         }
     });
 
-    parallel_clusterer::run(clusterer, rx.into_iter())
+    logmine_rs::parallel_clusterer::run(clusterer, rx.into_iter())
 }

@@ -27,6 +27,16 @@ impl<'a> Pattern<'a> {
         self.items.iter()
     }
 
+    pub fn push_text(mut self, item: impl Into<Cow<'a, str>>) -> Self {
+        self.items.push(PatternElement::Text(item.into()));
+        self
+    }
+
+    pub fn push_placeholder(mut self) -> Self {
+        self.items.push(PatternElement::Placeholder);
+        self
+    }
+
     pub fn len(&self) -> usize {
         self.items.len()
     }
