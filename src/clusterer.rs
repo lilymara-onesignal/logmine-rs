@@ -1,7 +1,7 @@
 use std::{borrow::Cow, fmt};
 
 use crate::{
-    patterns::{self, Pattern, PatternElement},
+    patterns::{Pattern, PatternElement},
     scoring,
 };
 
@@ -67,7 +67,7 @@ impl Clusterer {
                 cluster.count += 1;
                 let old_pattern = std::mem::take(&mut cluster.pattern);
 
-                cluster.pattern = patterns::create(old_pattern, pattern);
+                cluster.pattern = old_pattern.merge(pattern);
 
                 return;
             }

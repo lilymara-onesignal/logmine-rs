@@ -3,7 +3,7 @@ use std::sync::mpsc::Sender;
 
 use crate::{
     clusterer::{Cluster, Clusterer},
-    patterns, scoring,
+    scoring,
 };
 
 #[derive(Clone)]
@@ -64,7 +64,7 @@ fn merge(
 
                 let pattern_b = std::mem::take(&mut cluster_b.pattern);
 
-                cluster_b.pattern = patterns::create(cluster_a.pattern, pattern_b);
+                cluster_b.pattern = cluster_a.pattern.merge(pattern_b);
                 return;
             }
         }

@@ -45,46 +45,46 @@ impl<'a> Pattern<'a> {
     }
 }
 
-// p1 and p2 are owned vecs here instead of an immutable borrows so that we
-// can re-use heap space and cut down on allocations/clones
-pub(crate) fn create(p1: Pattern<'static>, p2: Pattern<'_>) -> Pattern<'static> {
-    if p1.items.is_empty() && p2.items.is_empty() {
-        return Pattern::default();
-    }
+impl Pattern<'static> {
+    pub fn merge(self, other: Pattern<'_>) -> Pattern<'static> {
+        if self.items.is_empty() && other.items.is_empty() {
+            return Pattern::default();
+        }
 
-    let strategy = SmithWaterman::new(10, -1, 0, 0);
+        let strategy = SmithWaterman::new(10, -1, 0, 0);
 
-    let aligner = AlignmentSet::<InMemoryAlignmentMatrix>::new(
-        p1.items.len(),
-        p2.items.len(),
-        strategy,
-        |p1_idx, p2_idx| p1.items[p1_idx] == p2.items[p2_idx],
-    )
-    .unwrap();
+        let aligner = AlignmentSet::<InMemoryAlignmentMatrix>::new(
+            self.items.len(),
+            other.items.len(),
+            strategy,
+            |p1_idx, p2_idx| self.items[p1_idx] == other.items[p2_idx],
+        )
+        .unwrap();
 
-    let mut in_pattern = p1;
-    let mut out_pattern = p2.reuse_for_static();
+        let mut in_pattern = self;
+        let mut out_pattern = other.reuse_for_static();
 
-    let mut just_inserted_placeholder = false;
-    for s in aligner.global_alignment().steps() {
-        match s {
-            Step::Align { x, .. } => {
-                let element =
-                    std::mem::replace(&mut in_pattern.items[x], PatternElement::Placeholder);
+        let mut just_inserted_placeholder = false;
+        for s in aligner.global_alignment().steps() {
+            match s {
+                Step::Align { x, .. } => {
+                    let element =
+                        std::mem::replace(&mut in_pattern.items[x], PatternElement::Placeholder);
 
-                out_pattern.items.push(element);
-                just_inserted_placeholder = false;
-            }
-            Step::Delete { .. } | Step::Insert { .. } => {
-                if !just_inserted_placeholder {
-                    out_pattern.items.push(PatternElement::Placeholder);
-                    just_inserted_placeholder = true;
+                    out_pattern.items.push(element);
+                    just_inserted_placeholder = false;
+                }
+                Step::Delete { .. } | Step::Insert { .. } => {
+                    if !just_inserted_placeholder {
+                        out_pattern.items.push(PatternElement::Placeholder);
+                        just_inserted_placeholder = true;
+                    }
                 }
             }
         }
-    }
 
-    out_pattern
+        out_pattern
+    }
 }
 
 impl<'a> From<&'a str> for PatternElement<'a> {
@@ -95,15 +95,12 @@ impl<'a> From<&'a str> for PatternElement<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{create, Pattern, PatternElement};
+    use super::{Pattern, PatternElement};
 
     #[test]
     fn test() {
         assert_eq!(
-            create(
-                Pattern::new(vec_into!["a", "b"]),
-                Pattern::new(vec_into!["a", "c"])
-            ),
+            Pattern::new(vec_into!["a", "b"]).merge(Pattern::new(vec_into!["a", "c"])),
             Pattern::new(vec_into!["a", PatternElement::Placeholder]),
         );
     }
@@ -111,10 +108,7 @@ mod tests {
     #[test]
     fn test_with_single_gap() {
         assert_eq!(
-            create(
-                Pattern::new(vec_into!["a", "c", "b"]),
-                Pattern::new(vec_into!["a", "b"])
-            ),
+            Pattern::new(vec_into!["a", "c", "b"]).merge(Pattern::new(vec_into!["a", "b"])),
             Pattern::new(vec_into!["a", PatternElement::Placeholder, "b"]),
         );
     }
@@ -122,10 +116,7 @@ mod tests {
     #[test]
     fn test_with_multiple_gaps() {
         assert_eq!(
-            create(
-                Pattern::new(vec_into!["a", "c", "b"]),
-                Pattern::new(vec_into!["a", "b", "d"])
-            ),
+            Pattern::new(vec_into!["a", "c", "b"]).merge(Pattern::new(vec_into!["a", "b", "d"])),
             Pattern::new(vec_into![
                 "a",
                 PatternElement::Placeholder,
@@ -138,10 +129,8 @@ mod tests {
     #[test]
     fn test_with_gaps_in_the_middle() {
         assert_eq!(
-            create(
-                Pattern::new(vec_into!["a", "b", "d", "e", "f"]),
-                Pattern::new(vec_into!["a", "b", "c", "e", "f"]),
-            ),
+            Pattern::new(vec_into!["a", "b", "d", "e", "f"])
+                .merge(Pattern::new(vec_into!["a", "b", "c", "e", "f"])),
             Pattern::new(vec_into!["a", "b", PatternElement::Placeholder, "e", "f",]),
         );
     }
@@ -150,10 +139,7 @@ mod tests {
     #[ignore]
     fn test_with_multiple_gaps_next_to_each_other() {
         assert_eq!(
-            create(
-                Pattern::new(vec_into!["a", "b", "c", "d"]),
-                Pattern::new(vec_into!["a", "d"])
-            ),
+            Pattern::new(vec_into!["a", "b", "c", "d"]).merge(Pattern::new(vec_into!["a", "d"])),
             Pattern::new(vec_into![
                 "a",
                 PatternElement::Placeholder,
