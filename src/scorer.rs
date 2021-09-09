@@ -1,3 +1,5 @@
+use crate::pattern_generator::PatternElement;
+
 pub struct Scorer {}
 
 impl Scorer {
@@ -5,7 +7,12 @@ impl Scorer {
         Self {}
     }
 
-    pub(crate) fn distance(&self, fields1: &[String], fields2: &[String], max_dist: f64) -> f64 {
+    pub(crate) fn distance(
+        &self,
+        fields1: &[PatternElement],
+        fields2: &[PatternElement],
+        max_dist: f64,
+    ) -> f64 {
         let max_len = fields1.len().max(fields2.len()) as f64;
 
         let mut total = 0.0;
@@ -20,7 +27,7 @@ impl Scorer {
         1.0 - total
     }
 
-    fn score(&self, f1: &str, f2: &str) -> f64 {
+    fn score(&self, f1: &PatternElement, f2: &PatternElement) -> f64 {
         if f1 == f2 {
             1.0
         } else {

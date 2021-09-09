@@ -15,7 +15,7 @@ pub struct Clusterer {
 
 #[derive(Debug, PartialEq)]
 pub struct Cluster {
-    representative: Vec<String>,
+    representative: Vec<PatternElement>,
     count: i32,
     pattern: Vec<PatternElement>,
 }
@@ -27,7 +27,7 @@ impl fmt::Display for Cluster {
         for element in &self.pattern {
             match element {
                 PatternElement::Text(t) => write!(f, "{} ", t)?,
-                PatternElement::Placeholder => write!(f, "----- ")?,
+                PatternElement::Placeholder => write!(f, "--- ")?,
             }
         }
 
@@ -57,35 +57,31 @@ impl Clusterer {
     }
 
     pub fn process_line(&mut self, line: &str) {
-        let tokens: Vec<String> = line.split(" ").map(|m| m.to_owned()).collect();
-        let pattern: Vec<PatternElement> = tokens
-            .iter()
-            .map(|t| PatternElement::Text(t.clone()))
+        let pattern: Vec<PatternElement> = line
+            .split(" ")
+            .map(|t| PatternElement::Text(t.to_owned()))
             .collect();
-
-        let mut found = false;
 
         for cluster in &mut self.clusters {
             let score = self
                 .scorer
-                .distance(&cluster.representative, &tokens, self.max_dist);
+                .distance(&cluster.representative, &pattern, self.max_dist);
 
             if score <= self.max_dist {
-                found = true;
                 cluster.count += 1;
-                cluster.pattern = self
-                    .pattern_generator
-                    .create_pattern(&cluster.pattern, &pattern);
+                let old_pattern = std::mem::take(&mut cluster.pattern);
+
+                cluster.pattern = self.pattern_generator.create_pattern(old_pattern, pattern);
+
+                return;
             }
         }
 
-        if !found {
-            self.clusters.push(Cluster {
-                representative: tokens,
-                count: 1,
-                pattern,
-            });
-        }
+        self.clusters.push(Cluster {
+            representative: pattern.clone(),
+            count: 1,
+            pattern,
+        });
     }
 
     pub fn result(self) -> Vec<Cluster> {
@@ -100,13 +96,6 @@ impl Clusterer {
             self.clusters
         }
     }
-
-    fn find(mut self, input_lines: &[&str]) -> Vec<Cluster> {
-        for line in input_lines {
-            self.process_line(line);
-        }
-        self.result()
-    }
 }
 
 #[cfg(test)]
@@ -114,6 +103,15 @@ mod test {
     use crate::pattern_generator::PatternElement;
 
     use super::{Cluster, Clusterer};
+
+    impl Clusterer {
+        fn find(mut self, input_lines: &[&str]) -> Vec<Cluster> {
+            for line in input_lines {
+                self.process_line(line);
+            }
+            self.result()
+        }
+    }
 
     #[test]
     fn test() {
