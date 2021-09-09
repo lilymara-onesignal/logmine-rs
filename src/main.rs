@@ -1,5 +1,3 @@
-use std::io::BufRead;
-
 #[macro_use]
 #[cfg(test)]
 mod macros;
