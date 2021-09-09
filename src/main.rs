@@ -13,13 +13,21 @@ use clusterer::{Cluster, Clusterer};
 use structopt::StructOpt;
 
 #[derive(structopt::StructOpt)]
+/// Use the logmine algorithm to find patterns in log files
 struct Options {
+    /// Run on all available system cores. By default logmine runs in a
+    /// single-threaded mode.
     #[structopt(long)]
     parallel: bool,
 
+    /// Controls the granularity of the clustering algorithm. Lower values of
+    /// max_distance will increase the granularity of clustering.
     #[structopt(long, default_value = "0.6")]
     max_distance: f64,
 
+    /// Minimum size of clusters to print in the output report. IE if
+    /// min_members is 2, and there is only one log entry matching a particular
+    /// pattern, that pattern will not be printed in the output.
     #[structopt(long, default_value = "2")]
     min_members: u32,
 }
