@@ -1,23 +1,22 @@
 use std::{borrow::Cow, fmt};
 
 use crate::{
-    pattern_generator::{PatternElement, PatternGenerator},
-    scorer::Scorer,
+    patterns::{self, PatternElement},
+    scoring,
 };
 
+#[derive(Clone)]
 pub struct Clusterer {
     clusters: Vec<Cluster<'static>>,
-    max_dist: f64,
-    scorer: Scorer,
-    pattern_generator: PatternGenerator,
-    min_members: i32,
+    pub max_dist: f64,
+    min_members: u32,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Cluster<'a> {
-    representative: Vec<PatternElement<'a>>,
-    count: i32,
-    pattern: Vec<PatternElement<'a>>,
+    pub representative: Vec<PatternElement<'a>>,
+    pub count: u32,
+    pub pattern: Vec<PatternElement<'a>>,
 }
 
 impl<'a> fmt::Display for Cluster<'a> {
@@ -40,8 +39,6 @@ impl Clusterer {
         Self {
             clusters: Vec::new(),
             max_dist: 0.01,
-            scorer: Scorer::new(),
-            pattern_generator: PatternGenerator::new(),
             min_members: 1,
         }
     }
@@ -51,7 +48,7 @@ impl Clusterer {
         self
     }
 
-    pub fn with_min_members(mut self, min_members: i32) -> Self {
+    pub fn with_min_members(mut self, min_members: u32) -> Self {
         self.min_members = min_members;
         self
     }
@@ -63,15 +60,13 @@ impl Clusterer {
             .collect();
 
         for cluster in &mut self.clusters {
-            let score = self
-                .scorer
-                .distance(&cluster.representative, &pattern, self.max_dist);
+            let score = scoring::distance(&cluster.representative, &pattern, self.max_dist);
 
             if score <= self.max_dist {
                 cluster.count += 1;
                 let old_pattern = std::mem::take(&mut cluster.pattern);
 
-                cluster.pattern = self.pattern_generator.create_pattern(old_pattern, pattern);
+                cluster.pattern = patterns::create(old_pattern, pattern);
 
                 return;
             }
@@ -108,7 +103,7 @@ impl Clusterer {
 
 #[cfg(test)]
 mod test {
-    use crate::pattern_generator::PatternElement;
+    use crate::patterns::PatternElement;
 
     use super::{Cluster, Clusterer};
 
