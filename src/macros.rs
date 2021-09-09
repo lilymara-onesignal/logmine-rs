@@ -6,6 +6,6 @@ macro_rules! vec_into {
             v.push($x.into());
         )*
 
-        v
+        v.into_iter().collect()
     })
 }

@@ -8,13 +8,18 @@ pub enum PatternElement<'a> {
     Placeholder,
 }
 
+#[cfg(feature = "small-vec")]
+type Storage<'a> = smallvec::SmallVec<[PatternElement<'a>; 5]>;
+#[cfg(not(feature = "small-vec"))]
+type Storage<'a> = Vec<PatternElement<'a>>;
+
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct Pattern<'a> {
-    items: Vec<PatternElement<'a>>,
+    items: Storage<'a>,
 }
 
 impl<'a> Pattern<'a> {
-    pub fn new(items: Vec<PatternElement<'a>>) -> Self {
+    pub fn new(items: Storage<'a>) -> Self {
         Self { items }
     }
 
@@ -38,9 +43,7 @@ impl<'a> Pattern<'a> {
         // Safety ----- it is acceptable to re-use vector heap space here since
         // we ensure to clear the vector of any non-'static items before running
         // the transmute.
-        let static_items = unsafe {
-            std::mem::transmute::<Vec<PatternElement<'_>>, Vec<PatternElement<'static>>>(items)
-        };
+        let static_items = unsafe { std::mem::transmute::<Storage<'_>, Storage<'static>>(items) };
 
         Pattern {
             items: static_items,

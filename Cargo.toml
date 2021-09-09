@@ -5,7 +5,12 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = []
+small-vec = ["smallvec"]
+
 [dependencies]
 rayon = "1.5.1"
 seal = { git = "https://github.com/regexident/rust-seal" }
+smallvec = { version = "1.6.1", optional = true }
 structopt = "0.3.23"
