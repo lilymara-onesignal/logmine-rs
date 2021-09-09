@@ -26,11 +26,18 @@ impl<'a> Pattern<'a> {
         self.items.len()
     }
 
+    /// Reinterpret the vector heap space used by this pattern (which may not
+    /// necessarily store 'static items) as a vector which can only store
+    /// 'static items. This will clear out all the items from this Pattern and
+    /// give you a new empty pattern whose vector already has some scratch space
+    /// to work with on it (assuming this pattern isn't empty).
     fn reuse_for_static(mut self) -> Pattern<'static> {
         let mut items = std::mem::take(&mut self.items);
         items.clear();
 
-        // Safety ----- it is acceptable to re-use vector heap space here since we ensure to clear the vector of any non-'static items before running the transmute.
+        // Safety ----- it is acceptable to re-use vector heap space here since
+        // we ensure to clear the vector of any non-'static items before running
+        // the transmute.
         let static_items = unsafe {
             std::mem::transmute::<Vec<PatternElement<'_>>, Vec<PatternElement<'static>>>(items)
         };
