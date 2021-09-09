@@ -10,7 +10,7 @@ mod scoring;
 
 use std::io::BufRead;
 
-use clusterer::Clusterer;
+use clusterer::{Cluster, Clusterer};
 use structopt::StructOpt;
 
 #[derive(structopt::StructOpt)]
@@ -32,14 +32,18 @@ fn main() {
         .with_max_dist(opts.max_distance)
         .with_min_members(opts.min_members);
 
-    if opts.parallel {
-        main_parallel(clusterer);
+    let clusters = if opts.parallel {
+        main_parallel(clusterer)
     } else {
-        main_single_core(clusterer);
+        main_single_core(clusterer)
+    };
+
+    for c in clusters {
+        println!("{}", c);
     }
 }
 
-fn main_single_core(mut clusterer: Clusterer) {
+fn main_single_core(mut clusterer: Clusterer) -> Vec<Cluster<'static>> {
     let stdin = std::io::stdin();
     let mut line = String::new();
 
@@ -52,12 +56,10 @@ fn main_single_core(mut clusterer: Clusterer) {
         clusterer.process_line(&mut line);
     }
 
-    for c in clusterer.result() {
-        println!("{}", c);
-    }
+    clusterer.result()
 }
 
-fn main_parallel(clusterer: Clusterer) {
+fn main_parallel(clusterer: Clusterer) -> Vec<Cluster<'static>> {
     let (tx, rx) = std::sync::mpsc::sync_channel(10_000);
 
     std::thread::spawn(move || {
@@ -69,7 +71,5 @@ fn main_parallel(clusterer: Clusterer) {
         }
     });
 
-    for c in parallel_clusterer::run(clusterer, rx.into_iter()) {
-        println!("{}", c);
-    }
+    parallel_clusterer::run(clusterer, rx.into_iter())
 }
