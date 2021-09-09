@@ -4,7 +4,7 @@ mod macros;
 
 mod clusterer;
 mod parallel_clusterer;
-mod patterns;
+mod pattern;
 mod processor;
 mod scoring;
 

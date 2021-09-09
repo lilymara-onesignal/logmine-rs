@@ -1,4 +1,4 @@
-use crate::patterns::{Pattern, PatternElement};
+use crate::pattern::{Pattern, PatternElement};
 
 pub(crate) fn distance(fields1: &Pattern, fields2: &Pattern, max_dist: f64) -> f64 {
     let max_len = fields1.len().max(fields2.len()) as f64;

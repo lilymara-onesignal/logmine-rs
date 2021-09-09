@@ -1,7 +1,7 @@
 use std::{borrow::Cow, fmt};
 
 use crate::{
-    patterns::{Pattern, PatternElement},
+    pattern::{Pattern, PatternElement},
     scoring,
 };
 
@@ -106,7 +106,7 @@ impl Clusterer {
 
 #[cfg(test)]
 mod test {
-    use crate::patterns::{Pattern, PatternElement};
+    use crate::pattern::{Pattern, PatternElement};
 
     use super::{Cluster, Clusterer};
 
