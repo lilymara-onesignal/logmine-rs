@@ -1,0 +1,10 @@
+#!/bin/bash
+
+cargo build --release
+
+./make-patterns 10000 | target/release/logmine-rs &
+pid=$!
+sudo dtrace -x ustackframes=100 -n "profile-97 /pid == $pid/ { @[ustack()] = count(); } syscall::*exit*:entry /pid == $pid/ { exit(0); }" -o out.user_stacks
+inferno-collapse-dtrace < out.user_stacks | inferno-flamegraph > flamegraph.svg
+
+open flamegraph.svg
