@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{borrow::Cow, fmt};
 
 use crate::{
     pattern_generator::{PatternElement, PatternGenerator},
@@ -6,7 +6,7 @@ use crate::{
 };
 
 pub struct Clusterer {
-    clusters: Vec<Cluster>,
+    clusters: Vec<Cluster<'static>>,
     max_dist: f64,
     scorer: Scorer,
     pattern_generator: PatternGenerator,
@@ -14,13 +14,13 @@ pub struct Clusterer {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Cluster {
-    representative: Vec<PatternElement>,
+pub struct Cluster<'a> {
+    representative: Vec<PatternElement<'a>>,
     count: i32,
-    pattern: Vec<PatternElement>,
+    pattern: Vec<PatternElement<'a>>,
 }
 
-impl fmt::Display for Cluster {
+impl<'a> fmt::Display for Cluster<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} ", self.count)?;
 
@@ -59,7 +59,7 @@ impl Clusterer {
     pub fn process_line(&mut self, line: &str) {
         let pattern: Vec<PatternElement> = line
             .split(" ")
-            .map(|t| PatternElement::Text(t.to_owned()))
+            .map(|t| PatternElement::Text(Cow::Borrowed(t)))
             .collect();
 
         for cluster in &mut self.clusters {
@@ -77,6 +77,14 @@ impl Clusterer {
             }
         }
 
+        let pattern: Vec<PatternElement<'static>> = pattern
+            .into_iter()
+            .map(|element| match element {
+                PatternElement::Placeholder => PatternElement::Placeholder,
+                PatternElement::Text(t) => PatternElement::Text(Cow::Owned(t.into_owned())),
+            })
+            .collect();
+
         self.clusters.push(Cluster {
             representative: pattern.clone(),
             count: 1,
@@ -84,7 +92,7 @@ impl Clusterer {
         });
     }
 
-    pub fn result(self) -> Vec<Cluster> {
+    pub fn result(self) -> Vec<Cluster<'static>> {
         if self.min_members > 1 {
             let min_members = self.min_members;
 
@@ -105,7 +113,7 @@ mod test {
     use super::{Cluster, Clusterer};
 
     impl Clusterer {
-        fn find(mut self, input_lines: &[&str]) -> Vec<Cluster> {
+        fn find(mut self, input_lines: &[&str]) -> Vec<Cluster<'static>> {
             for line in input_lines {
                 self.process_line(line);
             }

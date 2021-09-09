@@ -1,10 +1,12 @@
+use std::borrow::Cow;
+
 use seal::pair::{AlignmentSet, InMemoryAlignmentMatrix, SmithWaterman, Step};
 
 pub struct PatternGenerator {}
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum PatternElement {
-    Text(String),
+pub enum PatternElement<'a> {
+    Text(Cow<'a, str>),
     Placeholder,
 }
 
@@ -17,9 +19,9 @@ impl PatternGenerator {
     // can re-use heap space and cut down on allocations/clones
     pub(crate) fn create_pattern(
         &self,
-        p1: Vec<PatternElement>,
-        p2: Vec<PatternElement>,
-    ) -> Vec<PatternElement> {
+        p1: Vec<PatternElement<'static>>,
+        p2: Vec<PatternElement<'_>>,
+    ) -> Vec<PatternElement<'static>> {
         if p1.is_empty() && p2.is_empty() {
             return Vec::new();
         }
@@ -34,10 +36,23 @@ impl PatternGenerator {
         )
         .unwrap();
 
-        let mut in_pattern = p1;
+        let mut p2 = p2;
+        p2.clear();
 
-        let mut out_pattern = p2;
-        out_pattern.clear();
+        // Safety ----- p2 lacks the 'static lifetime in the function input
+        // params because it holds non-owned `PatternElement` values. When p2 is
+        // returned from this function, all of the values within it come from
+        // p1, which does have the 'static lifetime. That's why this is safe. At
+        // this point in the fn, p2 has just been cleared, so none of the values
+        // within it are still live.
+        let mut out_pattern = unsafe {
+            fn assert_static<T: 'static>(_x: &T) {}
+            assert_static(&p1);
+
+            std::mem::transmute::<Vec<PatternElement<'_>>, Vec<PatternElement<'static>>>(p2)
+        };
+
+        let mut in_pattern = p1;
 
         let mut just_inserted_placeholder = false;
         for s in aligner.global_alignment().steps() {
@@ -62,9 +77,9 @@ impl PatternGenerator {
     }
 }
 
-impl From<&str> for PatternElement {
-    fn from(s: &str) -> Self {
-        Self::Text(s.to_owned())
+impl<'a> From<&'a str> for PatternElement<'a> {
+    fn from(s: &'a str) -> Self {
+        Self::Text(Cow::Borrowed(s))
     }
 }
 
