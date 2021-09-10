@@ -3,13 +3,15 @@
 cargo build --release
 cargo build
 
+./make-patterns 10000 > data.txt
+
 profile() {
     count=$1
     cmd=$2
     filename=$3
 
     sudo rm out.user_stacks
-    ./make-patterns $count | pv | $cmd &
+    pv data.txt | $cmd &
     pid=$!
     sudo dtrace -x ustackframes=100 -n "profile-97 /pid == $pid/ { @[ustack()] = count(); } syscall::*exit*:entry /pid == $pid/ { exit(0); }" -o out.user_stacks
     inferno-collapse-dtrace < out.user_stacks | inferno-flamegraph > $filename
@@ -20,5 +22,5 @@ profile() {
 profile 10000 './target/release/logmine-rs' 'flamegraph-release-singlecore.svg'
 profile 10000 './target/release/logmine-rs --parallel' 'flamegraph-release-parallel.svg'
 
-profile 1000 './target/debug/logmine-rs' 'flamegraph-debug-singlecore.svg'
-profile 1000 './target/debug/logmine-rs --parallel' 'flamegraph-debug-parallel.svg'
+# profile 1000 './target/debug/logmine-rs' 'flamegraph-debug-singlecore.svg'
+# profile 1000 './target/debug/logmine-rs --parallel' 'flamegraph-debug-parallel.svg'

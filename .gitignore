@@ -1,3 +1,4 @@
 /target
 flamegraph*.svg
 out.user_stacks
+data.txt
