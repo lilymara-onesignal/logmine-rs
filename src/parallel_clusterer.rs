@@ -18,6 +18,7 @@ pub fn run(
     file: BufReader<File>,
 ) -> Vec<Cluster<'static>> {
     let pool = ThreadPoolBuilder::new()
+        .num_threads(num_cpus::get_physical())
         .thread_name(|i| format!("logmine-wrk-{}", i))
         .build()
         .unwrap();
