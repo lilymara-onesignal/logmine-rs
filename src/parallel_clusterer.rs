@@ -1,40 +1,34 @@
-use rayon::prelude::*;
-use std::sync::mpsc::Sender;
+use crossbeam_channel::Receiver;
+use rayon::ThreadPoolBuilder;
 
 use crate::{
     clusterer::{Cluster, Clusterer},
     scoring,
 };
 
-#[derive(Clone)]
-struct ParallelClusterer {
-    clusterer: Clusterer,
-    tx: Sender<Vec<Cluster<'static>>>,
-}
+pub fn run(clusterer: Clusterer, lines_rx: Receiver<String>) -> Vec<Cluster<'static>> {
+    let pool = ThreadPoolBuilder::new()
+        .num_threads(num_cpus::get_physical())
+        .build()
+        .unwrap();
+    let (tx, rx) = crossbeam_channel::bounded(pool.current_num_threads());
 
-impl Drop for ParallelClusterer {
-    fn drop(&mut self) {
-        self.tx
-            .send(self.clusterer.take_result().collect())
-            .unwrap();
+    for _ in 0..pool.current_num_threads() {
+        let mut clusterer = clusterer.clone();
+        let tx = tx.clone();
+        let lines_rx = lines_rx.clone();
+
+        pool.spawn(move || {
+            for line in lines_rx {
+                clusterer.process_line(&line);
+            }
+
+            tx.send(clusterer.take_result().collect()).unwrap();
+        });
     }
-}
 
-pub fn run(
-    clusterer: Clusterer,
-    lines: impl Send + Iterator<Item = String>,
-) -> Vec<Cluster<'static>> {
-    let (tx, rx) = std::sync::mpsc::channel();
-
-    lines.par_bridge().for_each_with(
-        ParallelClusterer {
-            clusterer: clusterer.clone(),
-            tx,
-        },
-        |clusterer, line| {
-            clusterer.clusterer.process_line(&line);
-        },
-    );
+    drop(lines_rx);
+    drop(tx);
 
     let mut total: Vec<Cluster<'static>> = Vec::new();
 

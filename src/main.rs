@@ -58,7 +58,7 @@ fn main_single_core(mut clusterer: Clusterer) -> Vec<Cluster<'static>> {
 }
 
 fn main_parallel(clusterer: Clusterer) -> Vec<Cluster<'static>> {
-    let (tx, rx) = std::sync::mpsc::sync_channel(100_000);
+    let (tx, rx) = crossbeam_channel::bounded(10_000);
 
     std::thread::spawn(move || {
         let stdin = std::io::stdin();
@@ -69,5 +69,5 @@ fn main_parallel(clusterer: Clusterer) -> Vec<Cluster<'static>> {
         }
     });
 
-    logmine_rs::parallel_clusterer::run(clusterer, rx.into_iter())
+    logmine_rs::parallel_clusterer::run(clusterer, rx)
 }

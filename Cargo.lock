@@ -285,6 +285,8 @@ name = "logmine-rs"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "crossbeam-channel",
+ "num_cpus",
  "rayon",
  "seal",
  "smallvec",
