@@ -18,6 +18,7 @@ rayon = "1.5.1"
 seal = { git = "https://github.com/lilymara-onesignal/rust-seal", branch = "lilymara-os-pr-1" }
 smallvec = { version = "1.6.1", optional = true }
 structopt = "0.3.23"
+parking_lot = "0.11"
 
 [dev-dependencies]
 criterion = "0.3"

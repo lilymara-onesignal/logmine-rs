@@ -1,7 +1,8 @@
+use parking_lot::Mutex;
 use std::{
     fs::File,
     io::{BufRead, BufReader},
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use crossbeam_channel::Sender;
@@ -58,7 +59,7 @@ fn run_single_thread(
     let mut lines = Vec::with_capacity(read_chunk_size);
 
     loop {
-        let mut lock = file.lock().unwrap();
+        let mut lock = file.lock();
 
         for _ in 0..read_chunk_size {
             let mut line = String::new();
