@@ -629,7 +629,7 @@ checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 [[package]]
 name = "seal"
 version = "0.1.0"
-source = "git+https://github.com/regexident/rust-seal#989735cd10c2f9556499dbd3758b344b1d8b78df"
+source = "git+https://github.com/lilymara-onesignal/rust-seal?branch=lilymara-os-pr-1#75f9d07fe5f65c2ee736273a16125bd24d6d40bc"
 dependencies = [
  "bitflags",
  "memmap",
