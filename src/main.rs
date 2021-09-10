@@ -51,7 +51,7 @@ fn main_single_core(mut clusterer: Clusterer) -> Vec<Cluster<'static>> {
             break;
         }
 
-        clusterer.process_line(&mut line);
+        clusterer.process_line(&line);
     }
 
     clusterer.result()

@@ -27,12 +27,16 @@ impl<'a> Pattern<'a> {
         self.items.iter()
     }
 
-    pub fn push_text(mut self, item: impl Into<Cow<'a, str>>) -> Self {
+    pub fn drain<'b>(&'b mut self) -> impl 'b + Iterator<Item = PatternElement<'a>> {
+        self.items.drain(..)
+    }
+
+    pub fn push_text(&mut self, item: impl Into<Cow<'a, str>>) -> &mut Self {
         self.items.push(PatternElement::Text(item.into()));
         self
     }
 
-    pub fn push_placeholder(mut self) -> Self {
+    pub fn push_placeholder(&mut self) -> &mut Self {
         self.items.push(PatternElement::Placeholder);
         self
     }
@@ -41,19 +45,16 @@ impl<'a> Pattern<'a> {
         self.items.len()
     }
 
-    /// Reinterpret the vector heap space used by this pattern (which may not
-    /// necessarily store 'static items) as a vector which can only store
-    /// 'static items. This will clear out all the items from this Pattern and
-    /// give you a new empty pattern whose vector already has some scratch space
-    /// to work with on it (assuming this pattern isn't empty).
-    fn reuse_for_static(mut self) -> Pattern<'static> {
+    /// Allow the heap space occupied by this pattern to be re-interpreted to
+    /// store items of a different lifetime.
+    pub fn clear_and_reinterpret<'b>(mut self) -> Pattern<'b> {
         let mut items = std::mem::take(&mut self.items);
         items.clear();
 
         // Safety ----- it is acceptable to re-use vector heap space here since
         // we ensure to clear the vector of any non-'static items before running
         // the transmute.
-        let static_items = unsafe { std::mem::transmute::<Storage<'_>, Storage<'static>>(items) };
+        let static_items = unsafe { std::mem::transmute::<Storage<'a>, Storage<'b>>(items) };
 
         Pattern {
             items: static_items,
@@ -66,7 +67,7 @@ impl<'a> Pattern<'a> {
 }
 
 impl Pattern<'static> {
-    pub fn merge(self, other: Pattern<'_>) -> Pattern<'static> {
+    pub fn merge(&mut self, other: Pattern<'_>) -> Pattern<'static> {
         if self.items.is_empty() && other.items.is_empty() {
             return Pattern::default();
         }
@@ -81,8 +82,8 @@ impl Pattern<'static> {
         )
         .unwrap();
 
-        let mut in_pattern = self;
-        let mut out_pattern = other.reuse_for_static();
+        let in_pattern = self;
+        let mut out_pattern = other.clear_and_reinterpret::<'static>();
 
         let mut just_inserted_placeholder = false;
         for s in aligner.global_alignment().steps() {

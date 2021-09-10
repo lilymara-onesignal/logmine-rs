@@ -10,6 +10,7 @@ pub struct Clusterer {
     clusters: Vec<Cluster<'static>>,
     pub max_dist: f64,
     min_members: u32,
+    pattern_backing_storage: Pattern<'static>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -40,6 +41,7 @@ impl Clusterer {
             clusters: Vec::new(),
             max_dist: 0.01,
             min_members: 1,
+            pattern_backing_storage: Pattern::default(),
         }
     }
 
@@ -54,34 +56,38 @@ impl Clusterer {
     }
 
     pub fn process_line(&mut self, line: &str) {
-        let pattern = Pattern::new(
-            line.split(" ")
-                .map(|t| PatternElement::Text(Cow::Borrowed(t)))
-                .collect(),
-        );
+        let mut pattern = std::mem::take(&mut self.pattern_backing_storage).clear_and_reinterpret();
+        for t in line.split(" ") {
+            pattern.push_text(t);
+        }
 
         for cluster in &mut self.clusters {
             let score = scoring::distance(&cluster.representative, &pattern, self.max_dist);
 
             if score <= self.max_dist {
                 cluster.count += 1;
-                let old_pattern = std::mem::take(&mut cluster.pattern);
+                let mut old_pattern = std::mem::take(&mut cluster.pattern);
 
                 cluster.pattern = old_pattern.merge(pattern);
+
+                self.pattern_backing_storage = old_pattern;
 
                 return;
             }
         }
 
+        let mut old_pattern = pattern;
+
         let pattern = Pattern::new(
-            pattern
-                .into_iter()
+            old_pattern
+                .drain()
                 .map(|element| match element {
                     PatternElement::Placeholder => PatternElement::Placeholder,
                     PatternElement::Text(t) => PatternElement::Text(Cow::Owned(t.into_owned())),
                 })
                 .collect(),
         );
+        self.pattern_backing_storage = old_pattern.clear_and_reinterpret();
 
         self.clusters.push(Cluster {
             representative: pattern.clone(),
