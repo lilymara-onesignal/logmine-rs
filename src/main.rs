@@ -4,19 +4,18 @@ use std::{
     path::PathBuf,
 };
 
-use logmine_rs::clusterer::{Cluster, Clusterer};
+use logmine_rs::clusterer::{Cluster, Clusterer, ClustererOptions};
 use structopt::StructOpt;
 
 #[derive(structopt::StructOpt)]
 /// Find patterns in log files
 struct Options {
-    /// Pin logmine to a single core rather than trying to use all available CPU
-    /// cores
-    #[structopt(long)]
-    single_core: bool,
+    /// Number of parallel threads to run
+    #[structopt(long, short)]
+    jobs: Option<usize>,
 
     /// Number of lines read at a time by each thread when running in parallel
-    /// mode. Has zero effect on the single-threaded mode
+    /// mode. Has zero effect when --jobs=1.
     #[structopt(long, short = "c", default_value = "10000")]
     parallel_read_chunk_size: usize,
 
@@ -39,16 +38,23 @@ struct Options {
 fn main() {
     let opts = Options::from_args();
 
-    let clusterer = Clusterer::new()
+    let clusterer_options = ClustererOptions::default()
         .with_max_dist(opts.max_distance)
         .with_min_members(opts.min_members);
 
     let file = BufReader::new(File::open(opts.file).unwrap());
 
-    let clusters = if opts.single_core {
-        main_single_core(clusterer, file)
+    let jobs = opts.jobs.unwrap_or_else(|| num_cpus::get_physical());
+
+    let clusters = if jobs == 1 {
+        main_single_core(clusterer_options, file)
     } else {
-        logmine_rs::parallel_clusterer::run(clusterer, opts.parallel_read_chunk_size, file)
+        logmine_rs::parallel_clusterer::run(
+            clusterer_options,
+            opts.parallel_read_chunk_size,
+            file,
+            jobs,
+        )
     };
 
     for c in clusters {
@@ -56,7 +62,13 @@ fn main() {
     }
 }
 
-fn main_single_core(mut clusterer: Clusterer, mut file: BufReader<File>) -> Vec<Cluster<'static>> {
+/// special-cased runner for when user passes --jobs=1. This avoids the
+/// threading & communication overhead of the parallel mode (~10%). With a non-1
+/// value for --jobs, this overhead is dwarfed by the performance gains from
+/// parallelism.
+fn main_single_core(options: ClustererOptions, mut file: BufReader<File>) -> Vec<Cluster<'static>> {
+    let mut clusterer = Clusterer::default().with_options(options);
+
     let mut line = String::new();
 
     loop {

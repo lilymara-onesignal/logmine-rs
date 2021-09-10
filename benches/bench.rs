@@ -32,7 +32,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         f.read_to_string(&mut s).unwrap();
 
         b.iter(|| {
-            let mut clusterer = Clusterer::new();
+            let mut clusterer = Clusterer::default();
 
             for line in s.lines() {
                 clusterer.process_line(line);

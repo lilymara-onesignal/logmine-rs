@@ -8,17 +8,18 @@ use crossbeam_channel::Sender;
 use rayon::ThreadPoolBuilder;
 
 use crate::{
-    clusterer::{Cluster, Clusterer},
+    clusterer::{Cluster, Clusterer, ClustererOptions},
     scoring,
 };
 
 pub fn run(
-    clusterer: Clusterer,
+    options: ClustererOptions,
     read_chunk_size: usize,
     file: BufReader<File>,
+    jobs: usize,
 ) -> Vec<Cluster<'static>> {
     let pool = ThreadPoolBuilder::new()
-        .num_threads(num_cpus::get_physical())
+        .num_threads(jobs)
         .thread_name(|i| format!("logmine-wrk-{}", i))
         .build()
         .unwrap();
@@ -27,12 +28,11 @@ pub fn run(
     let file = Arc::new(Mutex::new(file));
 
     for _ in 0..pool.current_num_threads() {
-        let clusterer = clusterer.clone();
         let tx = tx.clone();
         let file = file.clone();
 
         pool.spawn(move || {
-            run_single_thread(tx, clusterer, read_chunk_size, file);
+            run_single_thread(tx, options, read_chunk_size, file);
         });
     }
 
@@ -41,7 +41,7 @@ pub fn run(
     let mut total: Vec<Cluster<'static>> = Vec::new();
 
     for thread_results in rx {
-        merge(&mut total, thread_results, &clusterer);
+        merge(&mut total, thread_results, options);
     }
 
     total
@@ -49,10 +49,12 @@ pub fn run(
 
 fn run_single_thread(
     tx: Sender<Vec<Cluster<'static>>>,
-    mut clusterer: Clusterer,
+    options: ClustererOptions,
     read_chunk_size: usize,
     file: Arc<Mutex<BufReader<File>>>,
 ) {
+    let mut clusterer = Clusterer::default().with_options(options);
+
     let mut lines = Vec::with_capacity(read_chunk_size);
 
     loop {
@@ -83,17 +85,17 @@ fn run_single_thread(
 fn merge(
     total: &mut Vec<Cluster<'static>>,
     thread_results: Vec<Cluster<'static>>,
-    clusterer: &Clusterer,
+    options: ClustererOptions,
 ) {
     for mut cluster_a in thread_results {
         for cluster_b in total.iter_mut() {
             let score = scoring::distance(
                 &cluster_a.representative,
                 &cluster_b.representative,
-                clusterer.max_dist,
+                options.max_dist,
             );
 
-            if score <= clusterer.max_dist {
+            if score <= options.max_dist {
                 cluster_b.count += 1;
 
                 let pattern_b = std::mem::take(&mut cluster_b.pattern);

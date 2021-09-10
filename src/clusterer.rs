@@ -5,15 +5,20 @@ use crate::{
     scoring,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
+pub struct ClustererOptions {
+    pub max_dist: f64,
+    pub min_members: u32,
+}
+
+#[derive(Default)]
 pub struct Clusterer {
     clusters: Vec<Cluster<'static>>,
-    pub max_dist: f64,
-    min_members: u32,
+    options: ClustererOptions,
     pattern_backing_storage: Pattern<'static>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct Cluster<'a> {
     pub representative: Pattern<'a>,
     pub count: u32,
@@ -35,16 +40,7 @@ impl<'a> fmt::Display for Cluster<'a> {
     }
 }
 
-impl Clusterer {
-    pub fn new() -> Self {
-        Self {
-            clusters: Vec::new(),
-            max_dist: 0.01,
-            min_members: 1,
-            pattern_backing_storage: Pattern::default(),
-        }
-    }
-
+impl ClustererOptions {
     pub fn with_max_dist(mut self, max_dist: f64) -> Self {
         self.max_dist = max_dist;
         self
@@ -52,6 +48,32 @@ impl Clusterer {
 
     pub fn with_min_members(mut self, min_members: u32) -> Self {
         self.min_members = min_members;
+        self
+    }
+}
+
+impl Default for ClustererOptions {
+    fn default() -> Self {
+        Self {
+            max_dist: 0.01,
+            min_members: 1,
+        }
+    }
+}
+
+impl Clusterer {
+    pub fn with_options(mut self, options: ClustererOptions) -> Self {
+        self.options = options;
+        self
+    }
+
+    pub fn with_max_dist(mut self, max_dist: f64) -> Self {
+        self.options.max_dist = max_dist;
+        self
+    }
+
+    pub fn with_min_members(mut self, min_members: u32) -> Self {
+        self.options.min_members = min_members;
         self
     }
 
@@ -62,9 +84,9 @@ impl Clusterer {
         }
 
         for cluster in &mut self.clusters {
-            let score = scoring::distance(&cluster.representative, &pattern, self.max_dist);
+            let score = scoring::distance(&cluster.representative, &pattern, self.options.max_dist);
 
-            if score <= self.max_dist {
+            if score <= self.options.max_dist {
                 cluster.count += 1;
                 let mut old_pattern = std::mem::take(&mut cluster.pattern);
 
@@ -99,7 +121,7 @@ impl Clusterer {
     pub fn take_result(&mut self) -> impl Iterator<Item = Cluster<'static>> {
         let clusters = std::mem::take(&mut self.clusters);
 
-        let min_members = self.min_members;
+        let min_members = self.options.min_members;
 
         clusters.into_iter().filter(move |c| c.count >= min_members)
     }
@@ -122,10 +144,11 @@ mod test {
 
     #[test]
     fn test() {
-        let clusters =
-            Clusterer::new()
-                .with_max_dist(0.5)
-                .find(&["hello 1 y 3", "hello 1 x 3", "abc m n q"]);
+        let clusters = Clusterer::default().with_max_dist(0.5).find(&[
+            "hello 1 y 3",
+            "hello 1 x 3",
+            "abc m n q",
+        ]);
 
         assert_eq!(
             clusters,
@@ -151,7 +174,7 @@ mod test {
 
     #[test]
     fn test_min_members() {
-        let clusters = Clusterer::new()
+        let clusters = Clusterer::default()
             .with_max_dist(0.5)
             .with_min_members(2)
             .find(&["hello 1 y 3", "hello 1 x 3", "abc m n q"]);
@@ -168,10 +191,11 @@ mod test {
 
     #[test]
     fn test_small_max_dist() {
-        let clusters =
-            Clusterer::new()
-                .with_max_dist(0.01)
-                .find(&["hello 1 y 3", "hello 1 x 3", "abc m n q"]);
+        let clusters = Clusterer::default().with_max_dist(0.01).find(&[
+            "hello 1 y 3",
+            "hello 1 x 3",
+            "abc m n q",
+        ]);
 
         assert_eq!(
             clusters,
