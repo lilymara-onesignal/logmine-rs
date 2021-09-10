@@ -13,6 +13,10 @@ use crate::{
     scoring,
 };
 
+/// Number of times each IO thread will attempt to steal the lock on the file
+/// between CPU-bound work
+const LOCK_STEAL_ATTEMPTS: usize = 4;
+
 pub fn run(
     options: ClustererOptions,
     read_chunk_size: usize,
@@ -48,6 +52,16 @@ pub fn run(
     total
 }
 
+fn fill(lines: &mut Vec<String>, reader: &mut BufReader<File>) {
+    for _ in 0..lines.capacity() {
+        let mut line = String::new();
+        if reader.read_line(&mut line).unwrap() == 0 {
+            break;
+        }
+        lines.push(line);
+    }
+}
+
 fn run_single_thread(
     tx: Sender<Vec<Cluster<'static>>>,
     options: ClustererOptions,
@@ -58,25 +72,27 @@ fn run_single_thread(
 
     let mut lines = Vec::with_capacity(read_chunk_size);
 
-    loop {
+    'outer: loop {
         let mut lock = file.lock();
 
-        for _ in 0..read_chunk_size {
-            let mut line = String::new();
-            if lock.read_line(&mut line).unwrap() == 0 {
-                break;
-            }
-            lines.push(line);
-        }
-
+        fill(&mut lines, &mut *lock);
         drop(lock);
-
         if lines.is_empty() {
             break;
         }
 
-        for line in lines.drain(..) {
-            clusterer.process_line(&line);
+        for _ in 0..LOCK_STEAL_ATTEMPTS {
+            let range_max = (lines.capacity() / LOCK_STEAL_ATTEMPTS).min(lines.len());
+            for line in lines.drain(..range_max) {
+                clusterer.process_line(&line);
+            }
+
+            if let Some(mut lock) = file.try_lock() {
+                fill(&mut lines, &mut *lock);
+                if lines.is_empty() {
+                    break 'outer;
+                }
+            }
         }
     }
 
