@@ -1,15 +1,18 @@
-use std::io::BufRead;
-
 use logmine_rs::clusterer::{Cluster, Clusterer};
 use structopt::StructOpt;
 
 #[derive(structopt::StructOpt)]
-/// Use the logmine algorithm to find patterns in log files
+/// Find patterns in log files. Does not take in a file name to read, only reads
+/// from stdin
 struct Options {
-    /// Run on all available system cores. By default logmine runs in a
-    /// single-threaded mode.
+    /// Pin logmine to a single core rather than trying to use all available CPU
+    /// cores
     #[structopt(long)]
-    parallel: bool,
+    single_core: bool,
+
+    /// Number of lines read at a time by each thread when running in parallel mode
+    #[structopt(long, short = "c", default_value = "10000")]
+    parallel_read_chunk_size: usize,
 
     /// Controls the granularity of the clustering algorithm. Lower values of
     /// max_distance will increase the granularity of clustering.
@@ -30,10 +33,10 @@ fn main() {
         .with_max_dist(opts.max_distance)
         .with_min_members(opts.min_members);
 
-    let clusters = if opts.parallel {
-        main_parallel(clusterer)
-    } else {
+    let clusters = if opts.single_core {
         main_single_core(clusterer)
+    } else {
+        logmine_rs::parallel_clusterer::run(clusterer, opts.parallel_read_chunk_size)
     };
 
     for c in clusters {
@@ -55,19 +58,4 @@ fn main_single_core(mut clusterer: Clusterer) -> Vec<Cluster<'static>> {
     }
 
     clusterer.take_result().collect()
-}
-
-fn main_parallel(clusterer: Clusterer) -> Vec<Cluster<'static>> {
-    let (tx, rx) = crossbeam_channel::bounded(10_000);
-
-    std::thread::spawn(move || {
-        let stdin = std::io::stdin();
-        let stdin_lock = stdin.lock();
-
-        for line in stdin_lock.lines() {
-            tx.send(line.unwrap()).unwrap();
-        }
-    });
-
-    logmine_rs::parallel_clusterer::run(clusterer, rx)
 }
