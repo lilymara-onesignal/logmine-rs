@@ -38,7 +38,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 clusterer.process_line(line);
             }
 
-            black_box(clusterer.result());
+            black_box(clusterer.take_result().collect::<Vec<_>>());
         })
     });
 }

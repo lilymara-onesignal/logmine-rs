@@ -8,14 +8,15 @@ use crate::{
 
 #[derive(Clone)]
 struct ParallelClusterer {
-    clusterer: Option<Clusterer>,
+    clusterer: Clusterer,
     tx: Sender<Vec<Cluster<'static>>>,
 }
 
 impl Drop for ParallelClusterer {
     fn drop(&mut self) {
-        let clusterer = self.clusterer.take().unwrap();
-        self.tx.send(clusterer.result()).unwrap();
+        self.tx
+            .send(self.clusterer.take_result().collect())
+            .unwrap();
     }
 }
 
@@ -27,13 +28,11 @@ pub fn run(
 
     lines.par_bridge().for_each_with(
         ParallelClusterer {
-            clusterer: Some(clusterer.clone()),
+            clusterer: clusterer.clone(),
             tx,
         },
         |clusterer, line| {
-            if let Some(c) = &mut clusterer.clusterer {
-                c.process_line(&line);
-            }
+            clusterer.clusterer.process_line(&line);
         },
     );
 
@@ -51,7 +50,7 @@ fn merge(
     thread_results: Vec<Cluster<'static>>,
     clusterer: &Clusterer,
 ) {
-    for cluster_a in thread_results {
+    for mut cluster_a in thread_results {
         for cluster_b in total.iter_mut() {
             let score = scoring::distance(
                 &cluster_a.representative,

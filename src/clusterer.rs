@@ -96,17 +96,12 @@ impl Clusterer {
         });
     }
 
-    pub fn result(self) -> Vec<Cluster<'static>> {
-        if self.min_members > 1 {
-            let min_members = self.min_members;
+    pub fn take_result(&mut self) -> impl Iterator<Item = Cluster<'static>> {
+        let clusters = std::mem::take(&mut self.clusters);
 
-            self.clusters
-                .into_iter()
-                .filter(|c| c.count >= min_members)
-                .collect()
-        } else {
-            self.clusters
-        }
+        let min_members = self.min_members;
+
+        clusters.into_iter().filter(move |c| c.count >= min_members)
     }
 }
 
@@ -121,7 +116,7 @@ mod test {
             for line in input_lines {
                 self.process_line(line);
             }
-            self.result()
+            self.take_result().collect()
         }
     }
 

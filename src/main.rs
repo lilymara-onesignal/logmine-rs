@@ -54,11 +54,11 @@ fn main_single_core(mut clusterer: Clusterer) -> Vec<Cluster<'static>> {
         clusterer.process_line(&line);
     }
 
-    clusterer.result()
+    clusterer.take_result().collect()
 }
 
 fn main_parallel(clusterer: Clusterer) -> Vec<Cluster<'static>> {
-    let (tx, rx) = std::sync::mpsc::sync_channel(10_000);
+    let (tx, rx) = std::sync::mpsc::sync_channel(100_000);
 
     std::thread::spawn(move || {
         let stdin = std::io::stdin();
