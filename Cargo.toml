@@ -19,6 +19,7 @@ seal = { git = "https://github.com/lilymara-onesignal/rust-seal", branch = "lily
 smallvec = { version = "1.6.1", optional = true }
 structopt = "0.3.23"
 parking_lot = "0.11"
+indicatif = "0.16"
 
 [dev-dependencies]
 criterion = "0.3"

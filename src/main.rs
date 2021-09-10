@@ -4,6 +4,7 @@ use std::{
     path::PathBuf,
 };
 
+use indicatif::{ProgressBar, ProgressStyle};
 use logmine_rs::clusterer::{Cluster, Clusterer, ClustererOptions};
 use structopt::StructOpt;
 
@@ -30,9 +31,8 @@ struct Options {
     #[structopt(long, default_value = "2")]
     min_members: u32,
 
-    /// Path to the file to read
-    #[structopt(default_value = "/dev/stdin")]
-    file: PathBuf,
+    /// Path to the file to read. Will read from stdin if not specified.
+    file: Option<PathBuf>,
 }
 
 fn main() {
@@ -42,20 +42,46 @@ fn main() {
         .with_max_dist(opts.max_distance)
         .with_min_members(opts.min_members);
 
-    let file = BufReader::new(File::open(opts.file).unwrap());
+    let (file_path, is_stdin) = match opts.file {
+        Some(file) => (file, false),
+        None => ("/dev/stdin".into(), true),
+    };
+
+    let file = File::open(file_path).unwrap();
+    let filesize_bytes = file.metadata().unwrap().len();
+
+    let progress_bar = if is_stdin {
+        let bar = ProgressBar::new_spinner();
+        bar.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner} {elapsed_precise} {bytes} {bytes_per_sec}"),
+        );
+        bar
+    } else {
+        let bar = ProgressBar::new(filesize_bytes);
+        bar.set_style(ProgressStyle::default_bar().template(
+            "{percent}% {bytes} {bar:40.cyan/blue} {total_bytes} {elapsed_precise} (eta: {eta_precise}) {bytes_per_sec}",
+        ));
+        bar
+    };
+
+    let file = BufReader::new(file);
 
     let jobs = opts.jobs.unwrap_or_else(|| num_cpus::get_physical());
 
     let clusters = if jobs == 1 {
-        main_single_core(clusterer_options, file)
+        main_single_core(clusterer_options, file, progress_bar.clone())
     } else {
         logmine_rs::parallel_clusterer::run(
             clusterer_options,
             opts.parallel_read_chunk_size,
             file,
             jobs,
+            progress_bar.clone(),
         )
     };
+
+    progress_bar.finish_at_current_pos();
 
     for c in clusters {
         println!("{}", c);
@@ -66,18 +92,27 @@ fn main() {
 /// threading & communication overhead of the parallel mode (~10%). With a non-1
 /// value for --jobs, this overhead is dwarfed by the performance gains from
 /// parallelism.
-fn main_single_core(options: ClustererOptions, mut file: BufReader<File>) -> Vec<Cluster<'static>> {
+fn main_single_core(
+    options: ClustererOptions,
+    mut file: impl BufRead,
+    progress: ProgressBar,
+) -> Vec<Cluster<'static>> {
     let mut clusterer = Clusterer::default().with_options(options);
 
     let mut line = String::new();
 
-    loop {
-        line.clear();
-        if file.read_line(&mut line).unwrap() == 0 {
-            break;
-        }
+    'outer: loop {
+        let mut size = 0;
+        for _ in 0..100 {
+            line.clear();
+            if file.read_line(&mut line).unwrap() == 0 {
+                break 'outer;
+            }
 
-        clusterer.process_line(&line);
+            clusterer.process_line(&line);
+            size += line.len();
+        }
+        progress.inc(size as u64);
     }
 
     clusterer.take_result().collect()

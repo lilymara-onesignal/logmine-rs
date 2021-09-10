@@ -1,9 +1,6 @@
+use indicatif::ProgressBar;
 use parking_lot::Mutex;
-use std::{
-    fs::File,
-    io::{BufRead, BufReader},
-    sync::Arc,
-};
+use std::{io::BufRead, sync::Arc};
 
 use crossbeam_channel::Sender;
 use rayon::ThreadPoolBuilder;
@@ -20,8 +17,9 @@ const LOCK_STEAL_ATTEMPTS: usize = 4;
 pub fn run(
     options: ClustererOptions,
     read_chunk_size: usize,
-    file: BufReader<File>,
+    file: impl 'static + Sync + Send + BufRead,
     jobs: usize,
+    progress: ProgressBar,
 ) -> Vec<Cluster<'static>> {
     let pool = ThreadPoolBuilder::new()
         .num_threads(jobs)
@@ -35,9 +33,10 @@ pub fn run(
     for _ in 0..pool.current_num_threads() {
         let tx = tx.clone();
         let file = file.clone();
+        let progress = progress.clone();
 
         pool.spawn(move || {
-            run_single_thread(tx, options, read_chunk_size, file);
+            run_single_thread(tx, options, read_chunk_size, file, progress);
         });
     }
 
@@ -52,7 +51,7 @@ pub fn run(
     total
 }
 
-fn fill(lines: &mut Vec<String>, reader: &mut BufReader<File>) {
+fn fill(lines: &mut Vec<String>, reader: &mut impl BufRead) {
     for _ in 0..lines.capacity() {
         let mut line = String::new();
         if reader.read_line(&mut line).unwrap() == 0 {
@@ -66,7 +65,8 @@ fn run_single_thread(
     tx: Sender<Vec<Cluster<'static>>>,
     options: ClustererOptions,
     read_chunk_size: usize,
-    file: Arc<Mutex<BufReader<File>>>,
+    file: Arc<Mutex<impl BufRead>>,
+    progress: ProgressBar,
 ) {
     let mut clusterer = Clusterer::default().with_options(options);
 
@@ -83,9 +83,13 @@ fn run_single_thread(
 
         for _ in 0..LOCK_STEAL_ATTEMPTS {
             let range_max = (lines.capacity() / LOCK_STEAL_ATTEMPTS).min(lines.len());
+
+            let mut size = 0;
             for line in lines.drain(..range_max) {
                 clusterer.process_line(&line);
+                size += line.len();
             }
+            progress.inc(size as u64);
 
             if let Some(mut lock) = file.try_lock() {
                 fill(&mut lines, &mut *lock);
