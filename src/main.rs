@@ -1,16 +1,22 @@
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+    path::PathBuf,
+};
+
 use logmine_rs::clusterer::{Cluster, Clusterer};
 use structopt::StructOpt;
 
 #[derive(structopt::StructOpt)]
-/// Find patterns in log files. Does not take in a file name to read, only reads
-/// from stdin
+/// Find patterns in log files
 struct Options {
     /// Pin logmine to a single core rather than trying to use all available CPU
     /// cores
     #[structopt(long)]
     single_core: bool,
 
-    /// Number of lines read at a time by each thread when running in parallel mode
+    /// Number of lines read at a time by each thread when running in parallel
+    /// mode. Has zero effect on the single-threaded mode
     #[structopt(long, short = "c", default_value = "10000")]
     parallel_read_chunk_size: usize,
 
@@ -24,6 +30,10 @@ struct Options {
     /// pattern, that pattern will not be printed in the output.
     #[structopt(long, default_value = "2")]
     min_members: u32,
+
+    /// Path to the file to read
+    #[structopt(default_value = "/dev/stdin")]
+    file: PathBuf,
 }
 
 fn main() {
@@ -33,10 +43,12 @@ fn main() {
         .with_max_dist(opts.max_distance)
         .with_min_members(opts.min_members);
 
+    let file = BufReader::new(File::open(opts.file).unwrap());
+
     let clusters = if opts.single_core {
-        main_single_core(clusterer)
+        main_single_core(clusterer, file)
     } else {
-        logmine_rs::parallel_clusterer::run(clusterer, opts.parallel_read_chunk_size)
+        logmine_rs::parallel_clusterer::run(clusterer, opts.parallel_read_chunk_size, file)
     };
 
     for c in clusters {
@@ -44,13 +56,12 @@ fn main() {
     }
 }
 
-fn main_single_core(mut clusterer: Clusterer) -> Vec<Cluster<'static>> {
-    let stdin = std::io::stdin();
+fn main_single_core(mut clusterer: Clusterer, mut file: BufReader<File>) -> Vec<Cluster<'static>> {
     let mut line = String::new();
 
     loop {
         line.clear();
-        if stdin.read_line(&mut line).unwrap() == 0 {
+        if file.read_line(&mut line).unwrap() == 0 {
             break;
         }
 
