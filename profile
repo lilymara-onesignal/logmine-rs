@@ -1,6 +1,4 @@
 #!/bin/bash
 
-
-./make-patterns 10000 > data.txt
-sudo cargo flamegraph --bin logmine-rs -- ./data.txt
+cargo run --example make-patterns --release -- 100000 | pv | cargo flamegraph --root --bin logmine-rs
 open flamegraph.svg
