@@ -2,6 +2,7 @@ use std::{fs::File, io::Read};
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use logmine_rs::{clusterer::Clusterer, pattern::Pattern};
+use regex::Regex;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("merge patterns", |b| {
@@ -31,8 +32,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let mut s = String::new();
         f.read_to_string(&mut s).unwrap();
 
+        let split_regex = Regex::new("\\s+").unwrap();
+
         b.iter(|| {
-            let mut clusterer = Clusterer::default();
+            let mut clusterer = Clusterer::new(Default::default(), split_regex.clone());
 
             for line in s.lines() {
                 clusterer.process_line(line);

@@ -1,5 +1,7 @@
 use std::{borrow::Cow, fmt};
 
+use regex::Regex;
+
 use crate::{
     pattern::{Pattern, PatternElement},
     scoring,
@@ -11,11 +13,11 @@ pub struct ClustererOptions {
     pub min_members: u32,
 }
 
-#[derive(Default)]
 pub struct Clusterer {
     clusters: Vec<Cluster<'static>>,
     options: ClustererOptions,
     pattern_backing_storage: Pattern<'static>,
+    split_regex: Regex,
 }
 
 #[derive(Debug, PartialEq)]
@@ -62,24 +64,18 @@ impl Default for ClustererOptions {
 }
 
 impl Clusterer {
-    pub fn with_options(mut self, options: ClustererOptions) -> Self {
-        self.options = options;
-        self
-    }
-
-    pub fn with_max_dist(mut self, max_dist: f64) -> Self {
-        self.options.max_dist = max_dist;
-        self
-    }
-
-    pub fn with_min_members(mut self, min_members: u32) -> Self {
-        self.options.min_members = min_members;
-        self
+    pub fn new(options: ClustererOptions, split_regex: Regex) -> Self {
+        Self {
+            options,
+            split_regex,
+            clusters: Default::default(),
+            pattern_backing_storage: Default::default(),
+        }
     }
 
     pub fn process_line(&mut self, line: &str) {
         let mut pattern = std::mem::take(&mut self.pattern_backing_storage).clear_and_reinterpret();
-        for t in line.split(" ") {
+        for t in self.split_regex.split(line) {
             pattern.push_text(t);
         }
 
@@ -129,7 +125,12 @@ impl Clusterer {
 
 #[cfg(test)]
 mod test {
-    use crate::pattern::{Pattern, PatternElement};
+    use regex::Regex;
+
+    use crate::{
+        clusterer::ClustererOptions,
+        pattern::{Pattern, PatternElement},
+    };
 
     use super::{Cluster, Clusterer};
 
@@ -144,11 +145,14 @@ mod test {
 
     #[test]
     fn test() {
-        let clusters = Clusterer::default().with_max_dist(0.5).find(&[
-            "hello 1 y 3",
-            "hello 1 x 3",
-            "abc m n q",
-        ]);
+        let clusters = Clusterer::new(
+            ClustererOptions {
+                max_dist: 0.5,
+                ..Default::default()
+            },
+            Regex::new("\\s+").unwrap(),
+        )
+        .find(&["hello 1 y 3", "hello 1 x 3", "abc m n q"]);
 
         assert_eq!(
             clusters,
@@ -174,10 +178,14 @@ mod test {
 
     #[test]
     fn test_min_members() {
-        let clusters = Clusterer::default()
-            .with_max_dist(0.5)
-            .with_min_members(2)
-            .find(&["hello 1 y 3", "hello 1 x 3", "abc m n q"]);
+        let clusters = Clusterer::new(
+            ClustererOptions {
+                max_dist: 0.5,
+                min_members: 2,
+            },
+            Regex::new("\\s+").unwrap(),
+        )
+        .find(&["hello 1 y 3", "hello 1 x 3", "abc m n q"]);
 
         assert_eq!(
             clusters,
@@ -191,11 +199,14 @@ mod test {
 
     #[test]
     fn test_small_max_dist() {
-        let clusters = Clusterer::default().with_max_dist(0.01).find(&[
-            "hello 1 y 3",
-            "hello 1 x 3",
-            "abc m n q",
-        ]);
+        let clusters = Clusterer::new(
+            ClustererOptions {
+                max_dist: 0.01,
+                ..Default::default()
+            },
+            Regex::new("\\s+").unwrap(),
+        )
+        .find(&["hello 1 y 3", "hello 1 x 3", "abc m n q"]);
 
         assert_eq!(
             clusters,

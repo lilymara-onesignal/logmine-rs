@@ -6,6 +6,7 @@ use std::{
 
 use indicatif::{ProgressBar, ProgressStyle};
 use logmine_rs::clusterer::{Cluster, Clusterer, ClustererOptions};
+use regex::Regex;
 use structopt::StructOpt;
 
 #[derive(structopt::StructOpt)]
@@ -31,12 +32,18 @@ struct Options {
     #[structopt(long, default_value = "2")]
     min_members: u32,
 
+    /// Regex pattern to use to split segments of each line.
+    #[structopt(long, default_value = "\\s+")]
+    split_pattern: String,
+
     /// Path to the file to read. Will read from stdin if not specified.
     file: Option<PathBuf>,
 }
 
 fn main() {
     let opts = Options::from_args();
+
+    let split_regex = Regex::new(&opts.split_pattern).unwrap();
 
     let clusterer_options = ClustererOptions::default()
         .with_max_dist(opts.max_distance)
@@ -69,8 +76,8 @@ fn main() {
 
     let jobs = opts.jobs.unwrap_or_else(|| num_cpus::get_physical());
 
-    let clusters = if jobs == 1 {
-        main_single_core(clusterer_options, file, progress_bar.clone())
+    let mut clusters = if jobs == 1 {
+        main_single_core(clusterer_options, file, progress_bar.clone(), split_regex)
     } else {
         logmine_rs::parallel_clusterer::run(
             clusterer_options,
@@ -78,10 +85,13 @@ fn main() {
             file,
             jobs,
             progress_bar.clone(),
+            split_regex,
         )
     };
 
     progress_bar.finish_at_current_pos();
+
+    clusters.sort_by(|c1, c2| c2.count.cmp(&c1.count));
 
     for c in clusters {
         println!("{}", c);
@@ -96,8 +106,9 @@ fn main_single_core(
     options: ClustererOptions,
     mut file: impl BufRead,
     progress: ProgressBar,
+    split_regex: Regex,
 ) -> Vec<Cluster<'static>> {
-    let mut clusterer = Clusterer::default().with_options(options);
+    let mut clusterer = Clusterer::new(options, split_regex);
 
     let mut line = String::new();
 

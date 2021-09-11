@@ -1,5 +1,6 @@
 use indicatif::ProgressBar;
 use parking_lot::Mutex;
+use regex::Regex;
 use std::{io::BufRead, sync::Arc};
 
 use crossbeam_channel::Sender;
@@ -20,6 +21,7 @@ pub fn run(
     file: impl 'static + Sync + Send + BufRead,
     jobs: usize,
     progress: ProgressBar,
+    split_regex: Regex,
 ) -> Vec<Cluster<'static>> {
     let pool = ThreadPoolBuilder::new()
         .num_threads(jobs)
@@ -34,9 +36,10 @@ pub fn run(
         let tx = tx.clone();
         let file = file.clone();
         let progress = progress.clone();
+        let split_regex = split_regex.clone();
 
         pool.spawn(move || {
-            run_single_thread(tx, options, read_chunk_size, file, progress);
+            run_single_thread(tx, options, read_chunk_size, file, progress, split_regex);
         });
     }
 
@@ -67,8 +70,9 @@ fn run_single_thread(
     read_chunk_size: usize,
     file: Arc<Mutex<impl BufRead>>,
     progress: ProgressBar,
+    split_regex: Regex,
 ) {
-    let mut clusterer = Clusterer::default().with_options(options);
+    let mut clusterer = Clusterer::new(options, split_regex);
 
     let mut lines = Vec::with_capacity(read_chunk_size);
 
