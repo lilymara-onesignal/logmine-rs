@@ -45,6 +45,10 @@ impl<'a> Pattern<'a> {
         self.items.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+
     /// Allow the heap space occupied by this pattern to be re-interpreted to
     /// store items of a different lifetime.
     pub fn clear_and_reinterpret<'b>(mut self) -> Pattern<'b> {
@@ -60,8 +64,13 @@ impl<'a> Pattern<'a> {
             items: static_items,
         }
     }
+}
 
-    pub fn into_iter(self) -> impl Iterator<Item = PatternElement<'a>> {
+impl<'a> IntoIterator for Pattern<'a> {
+    type Item = PatternElement<'a>;
+    type IntoIter = <Vec<PatternElement<'a>> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
         self.items.into_iter()
     }
 }

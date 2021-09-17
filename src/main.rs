@@ -71,7 +71,7 @@ fn main() {
 
     let file = BufReader::new(file);
 
-    let jobs = opts.jobs.unwrap_or_else(|| num_cpus::get_physical());
+    let jobs = opts.jobs.unwrap_or_else(num_cpus::get_physical);
 
     let mut clusters = if jobs == 1 {
         logmine_rs::main_single_core(clusterer_options, file, progress_bar.clone(), split_regex)
