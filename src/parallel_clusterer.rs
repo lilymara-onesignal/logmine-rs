@@ -4,7 +4,7 @@ use regex::Regex;
 use std::{io::BufRead, sync::Arc};
 
 use crossbeam_channel::Sender;
-use rayon::ThreadPoolBuilder;
+use rayon::ThreadPool;
 
 use crate::{
     clusterer::{Cluster, Clusterer, ClustererOptions},
@@ -18,32 +18,29 @@ const LOCK_STEAL_ATTEMPTS: usize = 4;
 pub fn run(
     options: ClustererOptions,
     read_chunk_size: usize,
-    file: impl 'static + Sync + Send + BufRead,
-    jobs: usize,
+    file: impl Sync + Send + BufRead,
     progress: ProgressBar,
     split_regex: Regex,
+    pool: ThreadPool,
 ) -> Vec<Cluster<'static>> {
-    let pool = ThreadPoolBuilder::new()
-        .num_threads(jobs)
-        .thread_name(|i| format!("logmine-wrk-{}", i))
-        .build()
-        .unwrap();
     let (tx, rx) = crossbeam_channel::bounded(pool.current_num_threads());
 
     let file = Arc::new(Mutex::new(file));
 
-    for _ in 0..pool.current_num_threads() {
-        let tx = tx.clone();
-        let file = file.clone();
-        let progress = progress.clone();
-        let split_regex = split_regex.clone();
+    pool.scope(|scope| {
+        for _ in 0..pool.current_num_threads() {
+            let tx = tx.clone();
+            let file = file.clone();
+            let progress = progress.clone();
+            let split_regex = split_regex.clone();
 
-        pool.spawn(move || {
-            run_single_thread(tx, options, read_chunk_size, file, progress, split_regex);
-        });
-    }
+            scope.spawn(move |_| {
+                run_single_thread(tx, options, read_chunk_size, file, progress, split_regex);
+            });
+        }
 
-    drop(tx);
+        drop(tx);
+    });
 
     let mut total: Vec<Cluster<'static>> = Vec::new();
 
@@ -86,7 +83,11 @@ fn run_single_thread(
         }
 
         for _ in 0..LOCK_STEAL_ATTEMPTS {
-            let range_max = (lines.capacity() / LOCK_STEAL_ATTEMPTS).min(lines.len());
+            let range_max = if lines.capacity() < LOCK_STEAL_ATTEMPTS {
+                lines.len()
+            } else {
+                (lines.capacity() / LOCK_STEAL_ATTEMPTS).min(lines.len())
+            };
 
             let mut size = 0;
             for line in lines.drain(..range_max) {
@@ -131,5 +132,32 @@ fn merge(
         }
 
         total.push(cluster_a);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs::File, io::BufReader};
+
+    use indicatif::{ProgressBar, ProgressDrawTarget};
+    use rayon::ThreadPoolBuilder;
+    use regex::Regex;
+
+    use super::run;
+
+    #[test]
+    fn test_file_c_completes() {
+        let f = BufReader::new(File::open("test_files/c.txt").unwrap());
+        let progress = ProgressBar::new(0);
+        progress.set_draw_target(ProgressDrawTarget::hidden());
+
+        run(
+            Default::default(),
+            2,
+            f,
+            progress,
+            Regex::new("\\s+").unwrap(),
+            ThreadPoolBuilder::new().num_threads(1).build().unwrap(),
+        );
     }
 }

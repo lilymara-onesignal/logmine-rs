@@ -1,11 +1,8 @@
-use std::{
-    fs::File,
-    io::{BufRead, BufReader},
-    path::PathBuf,
-};
+use std::{fs::File, io::BufReader, path::PathBuf};
 
 use indicatif::{ProgressBar, ProgressStyle};
-use logmine_rs::clusterer::{Cluster, Clusterer, ClustererOptions};
+use logmine_rs::clusterer::ClustererOptions;
+use rayon::ThreadPoolBuilder;
 use regex::Regex;
 use structopt::StructOpt;
 
@@ -77,15 +74,19 @@ fn main() {
     let jobs = opts.jobs.unwrap_or_else(|| num_cpus::get_physical());
 
     let mut clusters = if jobs == 1 {
-        main_single_core(clusterer_options, file, progress_bar.clone(), split_regex)
+        logmine_rs::main_single_core(clusterer_options, file, progress_bar.clone(), split_regex)
     } else {
         logmine_rs::parallel_clusterer::run(
             clusterer_options,
             opts.parallel_read_chunk_size,
             file,
-            jobs,
             progress_bar.clone(),
             split_regex,
+            ThreadPoolBuilder::new()
+                .num_threads(jobs)
+                .thread_name(|i| format!("logmine-wrk-{}", i))
+                .build()
+                .unwrap(),
         )
     };
 
@@ -96,35 +97,4 @@ fn main() {
     for c in clusters {
         println!("{}", c);
     }
-}
-
-/// special-cased runner for when user passes --jobs=1. This avoids the
-/// threading & communication overhead of the parallel mode (~10%). With a non-1
-/// value for --jobs, this overhead is dwarfed by the performance gains from
-/// parallelism.
-fn main_single_core(
-    options: ClustererOptions,
-    mut file: impl BufRead,
-    progress: ProgressBar,
-    split_regex: Regex,
-) -> Vec<Cluster<'static>> {
-    let mut clusterer = Clusterer::new(options, split_regex);
-
-    let mut line = String::new();
-
-    'outer: loop {
-        let mut size = 0;
-        for _ in 0..100 {
-            line.clear();
-            if file.read_line(&mut line).unwrap() == 0 {
-                break 'outer;
-            }
-
-            clusterer.process_line(&line);
-            size += line.len();
-        }
-        progress.inc(size as u64);
-    }
-
-    clusterer.take_result().collect()
 }

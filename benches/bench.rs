@@ -1,7 +1,9 @@
-use std::{fs::File, io::Read};
+use std::{fs::File, io::BufReader};
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use logmine_rs::{clusterer::Clusterer, pattern::Pattern};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
+use indicatif::{ProgressBar, ProgressDrawTarget};
+use logmine_rs::{clusterer::ClustererOptions, pattern::Pattern};
+use rayon::ThreadPoolBuilder;
 use regex::Regex;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
@@ -27,22 +29,59 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         })
     });
 
-    c.bench_function("clusterer", |b| {
-        let mut f = File::open("test_files/c.txt").unwrap();
-        let mut s = String::new();
-        f.read_to_string(&mut s).unwrap();
+    let f = File::open("test_files/c.txt").unwrap();
+    let size = f.metadata().unwrap().len();
 
-        let split_regex = Regex::new("\\s+").unwrap();
+    let mut group = c.benchmark_group("clusterer");
+    group
+        .throughput(Throughput::Bytes(size))
+        .bench_function("single-core", |b| {
+            b.iter_batched(
+                || Regex::new("\\s+").unwrap(),
+                |split_regex| {
+                    let f = BufReader::new(File::open("test_files/c.txt").unwrap());
+                    let progress = ProgressBar::new(0);
+                    progress.set_draw_target(ProgressDrawTarget::hidden());
 
-        b.iter(|| {
-            let mut clusterer = Clusterer::new(Default::default(), split_regex.clone());
+                    black_box(logmine_rs::main_single_core(
+                        ClustererOptions {
+                            ..Default::default()
+                        },
+                        f,
+                        progress,
+                        split_regex,
+                    ));
+                },
+                criterion::BatchSize::SmallInput,
+            )
+        });
 
-            for line in s.lines() {
-                clusterer.process_line(line);
-            }
-
-            black_box(clusterer.take_result().collect::<Vec<_>>());
-        })
+    group.bench_function("multi-core", |b| {
+        b.iter_batched(
+            || {
+                (
+                    ThreadPoolBuilder::new().num_threads(4).build().unwrap(),
+                    BufReader::new(File::open("test_files/c.txt").unwrap()),
+                    {
+                        let progress = ProgressBar::new(0);
+                        progress.set_draw_target(ProgressDrawTarget::hidden());
+                        progress
+                    },
+                    Regex::new("\\s+").unwrap(),
+                )
+            },
+            |(pool, f, progress, split_regex)| {
+                black_box(logmine_rs::parallel_clusterer::run(
+                    Default::default(),
+                    2,
+                    f,
+                    progress,
+                    split_regex,
+                    pool,
+                ));
+            },
+            criterion::BatchSize::SmallInput,
+        );
     });
 }
 
