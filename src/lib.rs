@@ -11,6 +11,7 @@ mod macros;
 pub mod clusterer;
 pub mod parallel_clusterer;
 pub mod pattern;
+mod pool;
 pub mod scoring;
 
 /// special-cased runner for when user passes --jobs=1. This avoids the

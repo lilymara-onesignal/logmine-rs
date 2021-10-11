@@ -8,6 +8,7 @@ use rayon::ThreadPool;
 
 use crate::{
     clusterer::{Cluster, Clusterer, ClustererOptions},
+    pool::StringPool,
     scoring,
 };
 
@@ -51,13 +52,12 @@ pub fn run(
     total
 }
 
-fn fill(lines: &mut Vec<String>, reader: &mut impl BufRead) {
-    for _ in 0..lines.capacity() {
-        let mut line = String::new();
-        if reader.read_line(&mut line).unwrap() == 0 {
+fn fill(lines: &mut StringPool, reader: &mut impl BufRead) {
+    while let Some(mut line) = lines.take_dead() {
+        if reader.read_line(&mut *line).unwrap() == 0 {
+            line.stay_dead();
             break;
         }
-        lines.push(line);
     }
 }
 
@@ -71,7 +71,7 @@ fn run_single_thread(
 ) {
     let mut clusterer = Clusterer::new(options, split_regex);
 
-    let mut lines = Vec::with_capacity(read_chunk_size);
+    let mut lines = StringPool::with_capacity(read_chunk_size);
 
     'outer: loop {
         let mut lock = file.lock();
@@ -90,8 +90,9 @@ fn run_single_thread(
             };
 
             let mut size = 0;
-            for line in lines.drain(..range_max) {
-                clusterer.process_line(&line);
+            for _ in 0..range_max {
+                let line = lines.take_live().unwrap();
+                clusterer.process_line(line.as_ref());
                 size += line.len();
             }
             progress.inc(size as u64);
