@@ -123,12 +123,12 @@ fn merge(
             );
 
             if score <= options.max_dist {
-                cluster_b.count += 1;
+                cluster_b.count += cluster_a.count;
 
                 let pattern_b = std::mem::take(&mut cluster_b.pattern);
 
                 cluster_b.pattern = cluster_a.pattern.merge(pattern_b);
-                return;
+                break;
             }
         }
 
